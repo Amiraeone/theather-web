@@ -1,11 +1,30 @@
 import React, { useState, useEffect } from 'react';
 import { Ticket } from '../types';
 import { theaterDb } from '../db/theaterDatabase';
-import { ShieldCheck, Search, CheckCircle, AlertTriangle, XCircle, RotateCcw } from 'lucide-react';
+import {
+  ShieldCheck,
+  Search,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  RotateCcw,
+  Phone,
+  Ticket as TicketIcon,
+  Clock,
+  Calendar,
+  MapPin,
+  Check,
+  Armchair,
+  User,
+  ArrowRight
+} from 'lucide-react';
 
 export const TicketInspector: React.FC = () => {
+  const [searchMode, setSearchMode] = useState<'code' | 'phone'>('code');
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTicket, setActiveTicket] = useState<Ticket | null>(null);
+  const [phoneTickets, setPhoneTickets] = useState<Ticket[] | null>(null);
+
   const [inquiryResult, setInquiryResult] = useState<{
     status: 'idle' | 'success' | 'already_used' | 'not_found';
     message: string;
@@ -25,21 +44,7 @@ export const TicketInspector: React.FC = () => {
     return () => window.removeEventListener('theaterticket_db_updated', handleDbUpdate);
   }, []);
 
-  const handleSearch = (codeToSearch?: string) => {
-    const code = (codeToSearch !== undefined ? codeToSearch : searchQuery).trim();
-    if (!code) return;
-
-    const ticket = theaterDb.getTicketByCode(code);
-
-    if (!ticket) {
-      setInquiryResult({
-        status: 'not_found',
-        message: `بلیط با کد پیگیری «${code}» در سامانه یافت نشد. لطفاً کد را مجدداً بررسی نمایید.`,
-      });
-      setActiveTicket(null);
-      return;
-    }
-
+  const inspectSingleTicket = (ticket: Ticket) => {
     setActiveTicket(ticket);
     if (ticket.status === 'valid') {
       setInquiryResult({
@@ -62,6 +67,52 @@ export const TicketInspector: React.FC = () => {
     }
   };
 
+  const handleSearch = () => {
+    const raw = searchQuery.trim();
+    if (!raw) return;
+
+    // Reset current active states
+    setPhoneTickets(null);
+    setActiveTicket(null);
+
+    // Smart auto-detection: if starts with 09 or only digits with length >= 10, search by phone
+    const isLikelyPhone = searchMode === 'phone' || /^0?9\d{9}$/.test(raw.replace(/\s+/g, ''));
+
+    if (isLikelyPhone) {
+      const tickets = theaterDb.getTicketsByPhone(raw);
+      if (!tickets || tickets.length === 0) {
+        setInquiryResult({
+          status: 'not_found',
+          message: `هیچ بلیطی با شماره تلفن «${raw}» در سامانه یافت نشد. لطفاً صحت شماره را بررسی فرمایید.`,
+        });
+        return;
+      }
+
+      if (tickets.length === 1) {
+        // Exactly one ticket found -> inspect directly
+        inspectSingleTicket(tickets[0]);
+      } else {
+        // Multiple tickets found -> show selection list
+        setPhoneTickets(tickets);
+        setInquiryResult({
+          status: 'idle',
+          message: '',
+        });
+      }
+    } else {
+      // Search by ticket code
+      const ticket = theaterDb.getTicketByCode(raw);
+      if (!ticket) {
+        setInquiryResult({
+          status: 'not_found',
+          message: `بلیط با کد پیگیری «${raw}» در سامانه یافت نشد. لطفاً کد را مجدداً بررسی نمایید.`,
+        });
+        return;
+      }
+      inspectSingleTicket(ticket);
+    }
+  };
+
   const handleAdmitTicket = () => {
     if (!activeTicket) return;
 
@@ -73,6 +124,10 @@ export const TicketInspector: React.FC = () => {
         message: 'ورود تماشاگر با موفقیت تایید و بلیط باطل گردید.',
         ticket: res.ticket,
       });
+      // If we are in phoneTickets view, update that item in list too
+      if (phoneTickets) {
+        setPhoneTickets(phoneTickets.map((t) => (t.id === res.ticket!.id ? res.ticket! : t)));
+      }
       refreshData();
     } else {
       setInquiryResult({
@@ -86,6 +141,7 @@ export const TicketInspector: React.FC = () => {
   const handleResetSearch = () => {
     setSearchQuery('');
     setActiveTicket(null);
+    setPhoneTickets(null);
     setInquiryResult({ status: 'idle', message: '' });
   };
 
@@ -103,7 +159,7 @@ export const TicketInspector: React.FC = () => {
               سامانه استعلام و کنترل گیت ورودی
             </h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              احراز اصالت بلیط دیجیتال، پذیرش تماشاگران و جلوگیری از ورود تکراری به سالن
+              احراز اصالت بلیط دیجیتال با کد رهگیری یا شماره تلفن خریدار، پذیرش تماشاگران و ابطال هوشمند
             </p>
           </div>
         </div>
@@ -113,21 +169,21 @@ export const TicketInspector: React.FC = () => {
           <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-800">
             <span className="text-[11px] text-slate-400 dark:text-slate-500 block">کل صندلی‌های فروخته شده</span>
             <span className="text-lg font-black text-slate-900 dark:text-white tabular-nums mt-0.5 block">
-              {stats.totalSoldTickets} صندلی
+              {stats.totalSoldTickets.toLocaleString('fa-IR')} صندلی
             </span>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50">
             <span className="text-[11px] text-emerald-600 dark:text-emerald-400 block font-medium">پذیرش شده در سالن</span>
             <span className="text-lg font-black text-emerald-700 dark:text-emerald-300 tabular-nums mt-0.5 block">
-              {stats.totalAdmitted} نفر
+              {stats.totalAdmitted.toLocaleString('fa-IR')} نفر
             </span>
           </div>
 
           <div className="p-3.5 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/50">
             <span className="text-[11px] text-blue-600 dark:text-blue-400 block font-medium">منتظر ورود (فعال)</span>
             <span className="text-lg font-black text-blue-700 dark:text-blue-300 tabular-nums mt-0.5 block">
-              {stats.totalSoldTickets - stats.totalAdmitted} نفر
+              {(stats.totalSoldTickets - stats.totalAdmitted).toLocaleString('fa-IR')} نفر
             </span>
           </div>
 
@@ -142,20 +198,66 @@ export const TicketInspector: React.FC = () => {
 
       {/* Inquiry Box */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200/80 dark:border-slate-800 p-5 sm:p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
-            <Search className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <span>استعلام بارکد یا کد پیگیری بلیط</span>
-          </h2>
-          {activeTicket && (
+        
+        {/* Header & Reset */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Search className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white">
+              استعلام اصالت بلیط
+            </h2>
+          </div>
+
+          {(activeTicket || phoneTickets || inquiryResult.status !== 'idle') && (
             <button
               onClick={handleResetSearch}
-              className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1 transition-colors"
+              className="text-xs text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 flex items-center gap-1 transition-colors self-start sm:self-auto"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>استعلام بلیط جدید</span>
             </button>
           )}
+        </div>
+
+        {/* Search Mode Switcher Tabs */}
+        <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800/80 rounded-2xl gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setSearchMode('code');
+              setSearchQuery('');
+              setActiveTicket(null);
+              setPhoneTickets(null);
+              setInquiryResult({ status: 'idle', message: '' });
+            }}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              searchMode === 'code'
+                ? 'bg-white dark:bg-slate-900 text-blue-600 dark:text-blue-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <TicketIcon className="w-4 h-4" />
+            <span>استعلام با کد پیگیری (TT-XXXXXX)</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setSearchMode('phone');
+              setSearchQuery('');
+              setActiveTicket(null);
+              setPhoneTickets(null);
+              setInquiryResult({ status: 'idle', message: '' });
+            }}
+            className={`flex-1 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              searchMode === 'phone'
+                ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+            }`}
+          >
+            <Phone className="w-4 h-4" />
+            <span>استعلام با شماره تلفن همراه خریدار</span>
+          </button>
         </div>
 
         {/* Input Form */}
@@ -167,26 +269,140 @@ export const TicketInspector: React.FC = () => {
           className="flex flex-col sm:flex-row gap-2.5"
         >
           <div className="relative flex-1">
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="کد پیگیری را وارد نمایید (مثال: TT-782140)"
-              className="w-full pl-4 pr-10 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold tabular-nums tracking-wider text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-              autoFocus
-            />
-            <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+            {searchMode === 'code' ? (
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="کد پیگیری بلیط را وارد نمایید (مثال: TT-782140)"
+                className="w-full pl-4 pr-10 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold tabular-nums tracking-wider text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                autoFocus
+              />
+            ) : (
+              <input
+                type="tel"
+                dir="ltr"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="09121112233"
+                className="w-full pl-4 pr-10 py-3 rounded-2xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm font-bold tabular-nums tracking-wider text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                autoFocus
+              />
+            )}
+
+            {searchMode === 'code' ? (
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+            ) : (
+              <Phone className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+            )}
           </div>
 
           <button
             type="submit"
             className="px-6 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-xs font-bold text-white shadow-md shadow-emerald-600/20 transition-all min-h-[44px]"
           >
-            استعلام و احراز اصالت
+            {searchMode === 'code' ? 'استعلام کد پیگیری' : 'جستجوی بلیط‌های شماره تماس'}
           </button>
         </form>
 
-        {/* Inquiry Result Display */}
+        {/* Multi-Ticket Results when searching by Phone */}
+        {phoneTickets && phoneTickets.length > 1 && (
+          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                <User className="w-4 h-4 text-emerald-600" />
+                <span>
+                  تعداد {phoneTickets.length.toLocaleString('fa-IR')} بلیط به نام «{phoneTickets[0].buyerName}» با شماره تماس وارد شده یافت شد:
+                </span>
+              </span>
+              <span className="text-[11px] text-slate-400">
+                جهت پذیرش روی هر بلیط کلیک فرمایید
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 gap-2.5">
+              {phoneTickets.map((ticket) => {
+                const isValid = ticket.status === 'valid';
+                const isSelected = activeTicket?.id === ticket.id;
+
+                return (
+                  <div
+                    key={ticket.id}
+                    onClick={() => inspectSingleTicket(ticket)}
+                    className={`p-3.5 sm:p-4 rounded-2xl border transition-all cursor-pointer flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 ${
+                      isSelected
+                        ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 shadow-sm'
+                        : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/40 hover:border-emerald-300 dark:hover:border-emerald-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={ticket.posterUrl}
+                        alt={ticket.playTitle}
+                        className="w-12 h-16 rounded-xl object-cover shrink-0 shadow-2xs"
+                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <strong className="text-sm font-bold text-slate-900 dark:text-white">
+                            {ticket.playTitle}
+                          </strong>
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-200 tabular-nums">
+                            {ticket.id}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                            <span>{ticket.sessionDate}</span>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3.5 h-3.5 text-blue-500" />
+                            <span>{ticket.sessionTime}</span>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                            <span>{ticket.hallName}</span>
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-1 pt-0.5">
+                          <span>صندلی‌ها:</span>
+                          <strong className="text-blue-600 dark:text-blue-400">{ticket.seats.join('، ')}</strong>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                      {isValid ? (
+                        <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>معتبر جهت ورود</span>
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-xl text-xs font-bold bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 flex items-center gap-1">
+                          <AlertTriangle className="w-3.5 h-3.5" />
+                          <span>استفاده شده</span>
+                        </span>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          inspectSingleTicket(ticket);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-bold hover:bg-emerald-600 dark:hover:bg-emerald-400 transition-colors"
+                      >
+                        بررسی و ابطال
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Inquiry Result Display for Active Ticket */}
         {inquiryResult.status !== 'idle' && (
           <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
             
@@ -199,7 +415,7 @@ export const TicketInspector: React.FC = () => {
                     <span className="text-xs sm:text-sm font-bold">{inquiryResult.message}</span>
                   </div>
 
-                  <span className="self-start sm:self-auto px-3 py-1 rounded-xl text-xs font-black bg-emerald-600 text-white font-mono shadow-xs">
+                  <span className="self-start sm:self-auto px-3 py-1 rounded-xl text-xs font-black bg-emerald-600 text-white tabular-nums tracking-wide shadow-xs">
                     {activeTicket.id}
                   </span>
                 </div>
@@ -220,7 +436,9 @@ export const TicketInspector: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">مشخصات خریدار:</span>
-                    <span className="text-slate-800 dark:text-slate-200">{activeTicket.buyerName} <span dir="ltr" className="font-mono text-[11px]">({activeTicket.buyerPhone})</span></span>
+                    <span className="text-slate-800 dark:text-slate-200">
+                      {activeTicket.buyerName} <span dir="ltr" className="tabular-nums font-bold text-[11px]">({activeTicket.buyerPhone})</span>
+                    </span>
                   </div>
                 </div>
 
@@ -266,7 +484,9 @@ export const TicketInspector: React.FC = () => {
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">خریدار:</span>
-                    <span className="text-slate-800 dark:text-slate-200">{activeTicket.buyerName}</span>
+                    <span className="text-slate-800 dark:text-slate-200">
+                      {activeTicket.buyerName} <span dir="ltr" className="tabular-nums text-[11px]">({activeTicket.buyerPhone})</span>
+                    </span>
                   </div>
                   <div>
                     <span className="text-slate-400 block text-[11px]">زمان ابطال در گیت:</span>
@@ -278,14 +498,15 @@ export const TicketInspector: React.FC = () => {
 
             {/* Status: Not Found */}
             {inquiryResult.status === 'not_found' && (
-              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/80 text-rose-800 dark:text-rose-300 flex items-center gap-2 text-xs sm:text-sm">
-                <XCircle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
-                <span>{inquiryResult.message}</span>
+              <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 flex items-center gap-2.5 text-rose-700 dark:text-rose-300">
+                <XCircle className="w-5 h-5 shrink-0" />
+                <span className="text-xs sm:text-sm font-semibold">{inquiryResult.message}</span>
               </div>
             )}
 
           </div>
         )}
+
       </div>
 
     </div>

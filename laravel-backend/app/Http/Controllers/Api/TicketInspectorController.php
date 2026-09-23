@@ -32,6 +32,7 @@ class TicketInspectorController extends Controller
             ->where('tracking_code', $normalizedCode)
             ->orWhere('tracking_code', $queryStr)
             ->orWhere('qr_token', $queryStr)
+            ->orWhere('buyer_phone', $queryStr)
             ->first();
 
         if (!$ticket) {

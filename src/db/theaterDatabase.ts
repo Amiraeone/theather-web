@@ -286,6 +286,16 @@ export const theaterDb = {
     return tickets.filter((t) => t.buyerPhone.replace(/\s+/g, '') === userPhone.replace(/\s+/g, ''));
   },
 
+  getTicketsByPhone(phone: string): Ticket[] {
+    const cleanPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (!cleanPhone) return [];
+    const tickets = this.getAllTickets();
+    return tickets.filter((t) => {
+      const cleanBuyer = t.buyerPhone.replace(/[\s\-\(\)]/g, '');
+      return cleanBuyer === cleanPhone || (cleanPhone.length >= 7 && cleanBuyer.endsWith(cleanPhone.slice(-7)));
+    });
+  },
+
   getTicketByCode(code: string): Ticket | undefined {
     const clean = code.trim().toUpperCase();
     const tickets = this.getAllTickets();
