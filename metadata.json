@@ -1,0 +1,6 @@
+{
+  "name": "تئاتر تیکت - سامانه رزرو بلیط تئاتر",
+  "description": "سامانه مدرن و سریع خرید و رزرو صندلی بلیط تئاتر با پنل کاربری و پنل استعلام بلیط‌فروشی",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
